@@ -1,0 +1,265 @@
+name: sfg-platform-prod
+
+services:
+
+  nginx:
+    image: nginx:alpine
+    container_name: sfg-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - certbot_conf:/etc/letsencrypt
+    networks:
+      - sfg-network
+    depends_on:
+      - gateway
+      - frontend
+    restart: always
+
+
+  gateway:
+    image: ghcr.io/storyflowgram/api-gateway:latest 
+    container_name: sfg-gateway
+    env_file: .env
+    environment:
+      - JWT_SECRET_KEY=${GLOBAL_JWT_SECRET}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+    networks:
+      - sfg-network
+    depends_on:
+      - identity-service
+      - book-service
+    restart: always
+
+  frontend:
+    image: ghcr.io/storyflowgram/frontend:latest
+    container_name: sfg-frontend
+    env_file: .env
+    environment:
+      - VITE_BACKEND_HOST=${VITE_BACKEND_HOST}
+      - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
+      - VITE_API_URL=${VITE_API_URL}
+    networks:
+      - sfg-network
+    restart: always
+
+  bot-service:
+    image: ghcr.io/storyflowgram/sfg-tg-bot:latest
+    container_name: sfg-bot-service
+    env_file: .env
+    environment:
+      - TELEGRAM_ADMIN_ID=${TELEGRAM_ADMIN_ID}
+      - BOT_TOKEN=${BOT_TOKEN}
+      - WEB_APP_URL=${WEB_APP_URL}
+    networks:
+      - sfg-network
+    restart: always
+
+
+  identity-service:
+    image: ghcr.io/storyflowgram/identity-service:latest
+    container_name: sfg-identity-service
+    env_file: .env
+    environment:
+      - REDIS_URL=${IDENTITY_REDIS_URL}
+      - REDIS_HOST=${IDENTITY_REDIS_HOST}
+      - JWT_SECRET_KEY=${GLOBAL_JWT_SECRET} 
+      - SECRET_KEY=${GLOBAL_SECRET_KEY}
+    depends_on:
+      identity-db:   
+        condition: service_healthy
+    networks:
+      - sfg-network
+    restart: always
+
+  book-service:
+    image: ghcr.io/storyflowgram/book-service:latest
+    container_name: sfg-book-service
+    env_file: .env
+    environment:
+      - TASKIQ_BROKER_URL=${TASKIQ_BROKER_URL}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - S3_REGION_NAME=${S3_REGION_NAME}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+    depends_on:
+      book-db: 
+        condition: service_healthy
+      book-redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - sfg-network
+    restart: always
+
+  book-worker:  
+    image: ghcr.io/storyflowgram/book-service:latest 
+    container_name: sfg-book-worker
+    command: taskiq worker app.infrastructure.taskiq.broker:broker
+    env_file: .env
+    environment:
+      - TASKIQ_BROKER_URL=${TASKIQ_BROKER_URL}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - S3_REGION_NAME=${S3_REGION_NAME}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+    depends_on:
+      book-redis:
+        condition: service_healthy
+      book-db: 
+        condition: service_healthy
+    networks:
+      - sfg-network
+    restart: always
+
+  learning-service:
+    image: ghcr.io/storyflowgram/learning-service:latest
+    container_name: sfg-learning-service
+    env_file: .env
+    depends_on:
+      learn-db:
+        condition: service_healthy
+    networks:
+      - sfg-network
+    restart: always
+
+  reader-service:
+    image: ghcr.io/storyflowgram/reader-service:latest
+    container_name: sfg-reader-service
+    env_file: .env
+    environment:
+      - BOOK_SERVICE_URL=${READER_BOOK_SERVICE_URL}
+    depends_on:
+      reader-db:   
+        condition: service_healthy
+    networks:
+      - sfg-network
+    restart: always
+
+  translation-service:
+    image: ghcr.io/storyflowgram/translation-service:latest
+    container_name: sfg-translation-service
+    env_file: .env
+    networks:
+      - sfg-network
+    restart: always
+
+
+  identity-db:  
+    image: postgres:15
+    container_name: sfg-identity-db
+    environment:
+      - POSTGRES_USER=${IDENTITY_DB_USER}
+      - POSTGRES_PASSWORD=${IDENTITY_DB_PASSWORD}
+      - POSTGRES_DB=${IDENTITY_DB_NAME}
+    volumes:
+      - identity_pg_data:/var/lib/postgresql/data 
+    networks:
+      - sfg-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  book-db:
+    image: postgres:15
+    container_name: sfg-book-db
+    environment:
+      - POSTGRES_USER=${BOOK_DB_USER}
+      - POSTGRES_PASSWORD=${BOOK_DB_PASSWORD}
+      - POSTGRES_DB=${BOOK_DB_NAME}
+    volumes:
+      - book_pg_data:/var/lib/postgresql/data
+    networks:
+      - sfg-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  learn-db:
+    image: postgres:15
+    container_name: sfg-learn-db
+    environment:
+      - POSTGRES_USER=${LEARN_DB_USER}
+      - POSTGRES_PASSWORD=${LEARN_DB_PASSWORD}
+      - POSTGRES_DB=${LEARN_DB_NAME}
+    volumes:
+      - learn_pg_data:/var/lib/postgresql/data 
+    networks:
+      - sfg-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  reader-db:  
+    image: postgres:15
+    container_name: sfg-reader-db
+    environment:
+      - POSTGRES_USER=${READER_DB_USER}
+      - POSTGRES_PASSWORD=${READER_DB_PASSWORD}
+      - POSTGRES_DB=${READER_DB_NAME}
+    volumes:
+      - reader_pg_data:/var/lib/postgresql/data 
+    networks:
+      - sfg-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  book-redis:
+    image: redis:7-alpine
+    container_name: sfg-book-redis
+    networks:
+      - sfg-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: always
+
+  minio:
+    image: minio/minio
+    container_name: sfg-minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    networks:
+      - sfg-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: always
+
+volumes:
+  book_pg_data:
+  identity_pg_data:
+  learn_pg_data:
+  reader_pg_data:
+  minio_data:
+  certbot_conf: 
+
+networks:
+  sfg-network:
+    driver: bridge
