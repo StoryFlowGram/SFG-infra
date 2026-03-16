@@ -22,7 +22,7 @@ services:
   gateway:
     image: ghcr.io/storyflowgram/api-gateway:latest 
     container_name: sfg-gateway
-    env_file: .env
+
     environment:
       - JWT_SECRET_KEY=${GLOBAL_JWT_SECRET}
       - JWT_ALGORITHM=${JWT_ALGORITHM}
@@ -48,7 +48,7 @@ services:
   bot-service:
     image: ghcr.io/storyflowgram/sfg-tg-bot:latest
     container_name: sfg-bot-service
-    env_file: .env
+
     environment:
       - TELEGRAM_ADMIN_ID=${TELEGRAM_ADMIN_ID}
       - BOT_TOKEN=${BOT_TOKEN}
@@ -61,7 +61,6 @@ services:
   identity-service:
     image: ghcr.io/storyflowgram/identity-service:latest
     container_name: sfg-identity-service
-    env_file: .env
     environment:
       - REDIS_URL=${IDENTITY_REDIS_URL}
       - REDIS_HOST=${IDENTITY_REDIS_HOST}
@@ -77,9 +76,16 @@ services:
   book-service:
     image: ghcr.io/storyflowgram/book-service:latest
     container_name: sfg-book-service
-    env_file: .env
     environment:
+
+      - POSTGRES_USER=${BOOK_DB_USER}
+      - POSTGRES_PASSWORD=${BOOK_DB_PASSWORD}
+      - DB_NAME=${BOOK_DB_NAME}
+      - POSTGRES_DB=book-db 
+      
       - TASKIQ_BROKER_URL=${TASKIQ_BROKER_URL}
+      - REDIS_URL=${REDIS_URL}
+      
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
       - S3_REGION_NAME=${S3_REGION_NAME}
@@ -92,9 +98,10 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    ports:
+      - "8001:8000"
     networks:
       - sfg-network
-    restart: always
 
   book-worker:  
     image: ghcr.io/storyflowgram/book-service:latest 
@@ -120,7 +127,6 @@ services:
   learning-service:
     image: ghcr.io/storyflowgram/learning-service:latest
     container_name: sfg-learning-service
-    env_file: .env
     depends_on:
       learn-db:
         condition: service_healthy
@@ -131,7 +137,6 @@ services:
   reader-service:
     image: ghcr.io/storyflowgram/reader-service:latest
     container_name: sfg-reader-service
-    env_file: .env
     environment:
       - BOOK_SERVICE_URL=${READER_BOOK_SERVICE_URL}
     depends_on:
@@ -144,7 +149,6 @@ services:
   translation-service:
     image: ghcr.io/storyflowgram/translation-service:latest
     container_name: sfg-translation-service
-    env_file: .env
     networks:
       - sfg-network
     restart: always
