@@ -1,0 +1,42 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+      - test-ci/cd
+
+jobs:
+  deploy-infra:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Завантажуємо код репозиторію
+        uses: actions/checkout@v4
+
+      - name: Копіюємо docker-compose і nginx.conf на сервер
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "docker-compose-prod.yml,nginx.conf"
+          target: "/home/deployer/sfg-app"
+
+      - name: Застосовуємо зміни інфраструктури
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /home/deployer/sfg-app
+            
+            # Логінимося в GHCR 
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Підтягуємо останні версії образів 
+            docker compose -f docker-compose-prod.yml pull
+            
+            # Пересоздаємо контейнери з новими налаштуваннями конфігурації
+            docker compose -f docker-compose-prod.yml up -d --remove-orphans
