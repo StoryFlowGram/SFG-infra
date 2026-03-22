@@ -1,68 +1,80 @@
-name: sfg-platform-local
+name: sfg-platform-prod
 
 services:
 
-  gateway:
-    image: ghcr.io/storyflowgram/api-gateway:latest 
-    container_name: sfg-gateway
+  nginx:
+    image: nginx:alpine
+    container_name: sfg-nginx
     ports:
-      - "8000:8000"
-    env_file: .env
+      - "80:80"
+    volumes:
+      - ./nginx-local.conf:/etc/nginx/nginx.conf
+    networks:
+      - sfg-network
+    depends_on:
+      - gateway
+      - frontend
+    restart: always
+
+  gateway:
+    build: 
+      context: C:\spaced-repetition-bot\Backend\api-gateway
+      dockerfile: Dockerfile
+    container_name: sfg-gateway
+    env_file: .env.local
     environment:
       - JWT_SECRET_KEY=${GLOBAL_JWT_SECRET}
-      - JWT_ALGORITHM=${JWT_ALGORITHM}
     networks:
       - sfg-network
     depends_on:
       - identity-service
       - book-service
+    restart: always
 
   frontend:
-    image: ghcr.io/storyflowgram/frontend:latest
+    build: 
+      context: C:\spaced-repetition-bot\Frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL}
+        - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
     container_name: sfg-frontend
-    ports:
-      - "5173:80" 
-    env_file: .env
-    environment:
-      - VITE_BACKEND_HOST=${VITE_BACKEND_HOST}
-      - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
-      - VITE_API_URL=${VITE_API_URL}
+    env_file: .env.local
     networks:
       - sfg-network
+    restart: always
 
   bot-service:
-    image: ghcr.io/storyflowgram/sfg-tg-bot:latest
+    build:
+      context: C:\spaced-repetition-bot\bot-service
+      dockerfile: Dockerfile
     container_name: sfg-bot-service
-    env_file: .env
-    environment:
-      - TELEGRAM_ADMIN_ID=${TELEGRAM_ADMIN_ID}
-      - BOT_TOKEN=${BOT_TOKEN}
-      - WEB_APP_URL=${WEB_APP_URL}
+    env_file: .env.local
     networks:
       - sfg-network
+    restart: always
 
-  # ================= MICROSERVICES =================
   identity-service:
-    image: ghcr.io/storyflowgram/identity-service:latest
+    build:
+      context: C:\spaced-repetition-bot\Backend\identity-service
+      dockerfile: Dockerfile
     container_name: sfg-identity-service
-    env_file: .env
-    environment:
-      - REDIS_URL=${IDENTITY_REDIS_URL}
-      - REDIS_HOST=${IDENTITY_REDIS_HOST}
-      - JWT_SECRET_KEY=${GLOBAL_JWT_SECRET} 
-      - SECRET_KEY=${GLOBAL_SECRET_KEY}
-    depends_on:
-      identity-db:   
-        condition: service_healthy
+    env_file: .env.local
     ports:
       - "8002:8000"
+    depends_on:
+      identity-db:
+        condition: service_healthy
     networks:
       - sfg-network
+    restart: always
 
   book-service:
-    image: ghcr.io/storyflowgram/book-service:latest
+    build:
+      context: C:\spaced-repetition-bot\Backend\book-service
+      dockerfile: Dockerfile
     container_name: sfg-book-service
-    env_file: .env
+    env_file: .env.local
     environment:
       - TASKIQ_BROKER_URL=${TASKIQ_BROKER_URL}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
@@ -71,7 +83,7 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
     depends_on:
-      book-db: 
+      book-db:
         condition: service_healthy
       book-redis:
         condition: service_healthy
@@ -81,12 +93,15 @@ services:
       - "8001:8000"
     networks:
       - sfg-network
+    restart: always
 
   book-worker:  
-    image: ghcr.io/storyflowgram/book-service:latest 
+    build:
+      context: C:\spaced-repetition-bot\Backend\book-service
+      dockerfile: Dockerfile
     container_name: sfg-book-worker
     command: taskiq worker app.infrastructure.taskiq.broker:broker
-    env_file: .env
+    env_file: .env.local
     environment:
       - TASKIQ_BROKER_URL=${TASKIQ_BROKER_URL}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
@@ -101,128 +116,121 @@ services:
         condition: service_healthy
     networks:
       - sfg-network
+    restart: always
 
   learning-service:
-    image: ghcr.io/storyflowgram/learning-service:latest
+    build:
+      context: C:\spaced-repetition-bot\Backend\learning-service
+      dockerfile: Dockerfile
     container_name: sfg-learning-service
-    env_file: .env
+    env_file: .env.local
     depends_on:
       learn-db:
         condition: service_healthy
-    ports:
-      - "8003:8000"
     networks:
       - sfg-network
+    restart: always
 
   reader-service:
-    image: ghcr.io/storyflowgram/reader-service:latest
+    build:
+      context: C:\spaced-repetition-bot\Backend\reader-service
+      dockerfile: Dockerfile
     container_name: sfg-reader-service
-    env_file: .env
-    environment:
-      - BOOK_SERVICE_URL=${READER_BOOK_SERVICE_URL}
+    env_file: .env.local
     depends_on:
-      reader-db:   
+      reader-db:
         condition: service_healthy
-    ports:
-      - "8004:8000"
     networks:
       - sfg-network
+    restart: always
 
   translation-service:
-    image: ghcr.io/storyflowgram/translation-service:latest
+    build:
+      context: C:\spaced-repetition-bot\Backend\translation-service
+      dockerfile: Dockerfile
     container_name: sfg-translation-service
-    env_file: .env
-    ports:
-      - "8005:8000"
+    env_file: .env.local
     networks:
       - sfg-network
+    restart: always
 
-  # ================= DATABASES & INFRASTRUCTURE =================
+
+  # DATABASES
   identity-db:  
     image: postgres:15
     container_name: sfg-identity-db
     environment:
-      - POSTGRES_USER=${IDENTITY_DB_USER}
-      - POSTGRES_PASSWORD=${IDENTITY_DB_PASSWORD}
-      - POSTGRES_DB=${IDENTITY_DB_NAME}
+      POSTGRES_USER: postgres_identity
+      POSTGRES_PASSWORD: postgres_identity
+      POSTGRES_DB: identity-db
     volumes:
-      - identity_pg_data:/var/lib/postgresql/data 
-    ports:
-      - "5434:5432"
+      - identity_pg_data_v3:/var/lib/postgresql/data 
     networks:
       - sfg-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U postgres_identity -d identity-db"]
       interval: 5s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: always
 
   book-db:
     image: postgres:15
     container_name: sfg-book-db
     environment:
-      - POSTGRES_USER=${BOOK_DB_USER}
-      - POSTGRES_PASSWORD=${BOOK_DB_PASSWORD}
-      - POSTGRES_DB=${BOOK_DB_NAME}
+      POSTGRES_USER: postgres_book
+      POSTGRES_PASSWORD: postgres_book
+      POSTGRES_DB: book-db
     volumes:
-      - book_pg_data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432" 
+      - book_pg_data_v3:/var/lib/postgresql/data
     networks:
       - sfg-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U postgres_book -d book-db"]
       interval: 5s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: always
 
   learn-db:
     image: postgres:15
     container_name: sfg-learn-db
     environment:
-      - POSTGRES_USER=${LEARN_DB_USER}
-      - POSTGRES_PASSWORD=${LEARN_DB_PASSWORD}
-      - POSTGRES_DB=${LEARN_DB_NAME}
+      POSTGRES_USER: postgres_learn
+      POSTGRES_PASSWORD: postgres_learn
+      POSTGRES_DB: learn-db
     volumes:
-      - learn_pg_data:/var/lib/postgresql/data 
-    ports:
-      - "5435:5432"
+      - learn_pg_data_v3:/var/lib/postgresql/data 
     networks:
       - sfg-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U postgres_learn -d learn-db"]
       interval: 5s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: always
 
   reader-db:  
     image: postgres:15
     container_name: sfg-reader-db
     environment:
-      - POSTGRES_USER=${READER_DB_USER}
-      - POSTGRES_PASSWORD=${READER_DB_PASSWORD}
-      - POSTGRES_DB=${READER_DB_NAME}
+      POSTGRES_USER: postgres_reader
+      POSTGRES_PASSWORD: postgres_reader
+      POSTGRES_DB: reader-db
     volumes:
-      - reader_pg_data:/var/lib/postgresql/data 
-    ports:
-      - "5436:5432"
+      - reader_pg_data_v3:/var/lib/postgresql/data 
     networks:
       - sfg-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U postgres_reader -d reader-db"]
       interval: 5s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: always
 
   book-redis:
     image: redis:7-alpine
     container_name: sfg-book-redis
-    ports:
-      - "6380:6379"
     networks:
       - sfg-network
     healthcheck:
@@ -230,7 +238,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-    restart: unless-stopped
+    restart: always
 
   minio:
     image: minio/minio
@@ -240,10 +248,7 @@ services:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     volumes:
-      - minio_data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+      - minio_data_v3:/data
     networks:
       - sfg-network
     healthcheck:
@@ -251,14 +256,15 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
-    restart: unless-stopped
+    restart: always
 
 volumes:
-  book_pg_data:
-  identity_pg_data:
-  learn_pg_data:
-  reader_pg_data:
-  minio_data:
+  book_pg_data_v3:
+  identity_pg_data_v3:
+  learn_pg_data_v3:
+  reader_pg_data_v3:
+  minio_data_v3:
+  certbot_conf:
 
 networks:
   sfg-network:

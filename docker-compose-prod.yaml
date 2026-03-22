@@ -22,7 +22,7 @@ services:
   gateway:
     image: ghcr.io/storyflowgram/api-gateway:latest 
     container_name: sfg-gateway
-    env_file: .env
+
     environment:
       - JWT_SECRET_KEY=${GLOBAL_JWT_SECRET}
       - JWT_ALGORITHM=${JWT_ALGORITHM}
@@ -48,7 +48,7 @@ services:
   bot-service:
     image: ghcr.io/storyflowgram/sfg-tg-bot:latest
     container_name: sfg-bot-service
-    env_file: .env
+
     environment:
       - TELEGRAM_ADMIN_ID=${TELEGRAM_ADMIN_ID}
       - BOT_TOKEN=${BOT_TOKEN}
@@ -63,12 +63,18 @@ services:
     container_name: sfg-identity-service
     env_file: .env
     environment:
+      - POSTGRES_USER=${IDENTITY_DB_USER}
+      - POSTGRES_PASSWORD=${IDENTITY_DB_PASSWORD}
+      - POSTGRES_DB=${IDENTITY_DB_NAME}
+      - DB_NAME=${IDENTITY_DB_NAME}
+      - DB_HOST=identity-db
       - REDIS_URL=${IDENTITY_REDIS_URL}
       - REDIS_HOST=${IDENTITY_REDIS_HOST}
-      - JWT_SECRET_KEY=${GLOBAL_JWT_SECRET} 
+      - JWT_SECRET=${GLOBAL_JWT_SECRET}
+      - JWT_SECRET_KEY=${GLOBAL_JWT_SECRET}
       - SECRET_KEY=${GLOBAL_SECRET_KEY}
     depends_on:
-      identity-db:   
+      identity-db:
         condition: service_healthy
     networks:
       - sfg-network
@@ -77,9 +83,15 @@ services:
   book-service:
     image: ghcr.io/storyflowgram/book-service:latest
     container_name: sfg-book-service
-    env_file: .env
     environment:
+      - POSTGRES_USER=${BOOK_DB_USER}
+      - POSTGRES_PASSWORD=${BOOK_DB_PASSWORD}
+      - DB_NAME=${BOOK_DB_NAME}
+      - POSTGRES_DB=${BOOK_DB_NAME}
+      
       - TASKIQ_BROKER_URL=${TASKIQ_BROKER_URL}
+      - REDIS_URL=${REDIS_URL}
+      
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
       - S3_REGION_NAME=${S3_REGION_NAME}
@@ -92,6 +104,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    ports:
+      - "8001:8000"
     networks:
       - sfg-network
     restart: always
@@ -102,6 +116,10 @@ services:
     command: taskiq worker app.infrastructure.taskiq.broker:broker
     env_file: .env
     environment:
+      - POSTGRES_USER=${BOOK_DB_USER}
+      - POSTGRES_PASSWORD=${BOOK_DB_PASSWORD}
+      - DB_NAME=${BOOK_DB_NAME}
+      - POSTGRES_DB=${BOOK_DB_NAME}
       - TASKIQ_BROKER_URL=${TASKIQ_BROKER_URL}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
@@ -121,6 +139,11 @@ services:
     image: ghcr.io/storyflowgram/learning-service:latest
     container_name: sfg-learning-service
     env_file: .env
+    environment:
+      - POSTGRES_USER=${LEARN_DB_USER}
+      - POSTGRES_PASSWORD=${LEARN_DB_PASSWORD}
+      - POSTGRES_DB=${LEARN_DB_NAME}
+      - DB_HOST=learn-db
     depends_on:
       learn-db:
         condition: service_healthy
@@ -133,9 +156,14 @@ services:
     container_name: sfg-reader-service
     env_file: .env
     environment:
+      - POSTGRES_USER=${READER_DB_USER}
+      - POSTGRES_PASSWORD=${READER_DB_PASSWORD}
+      - POSTGRES_DB=${READER_DB_NAME}
+      - DB_NAME=${READER_DB_NAME}
+      - DB_HOST=reader-db
       - BOOK_SERVICE_URL=${READER_BOOK_SERVICE_URL}
     depends_on:
-      reader-db:   
+      reader-db:
         condition: service_healthy
     networks:
       - sfg-network
@@ -144,7 +172,6 @@ services:
   translation-service:
     image: ghcr.io/storyflowgram/translation-service:latest
     container_name: sfg-translation-service
-    env_file: .env
     networks:
       - sfg-network
     restart: always
@@ -157,6 +184,7 @@ services:
       - POSTGRES_USER=${IDENTITY_DB_USER}
       - POSTGRES_PASSWORD=${IDENTITY_DB_PASSWORD}
       - POSTGRES_DB=${IDENTITY_DB_NAME}
+
     volumes:
       - identity_pg_data:/var/lib/postgresql/data 
     networks:
@@ -175,6 +203,8 @@ services:
       - POSTGRES_USER=${BOOK_DB_USER}
       - POSTGRES_PASSWORD=${BOOK_DB_PASSWORD}
       - POSTGRES_DB=${BOOK_DB_NAME}
+
+
     volumes:
       - book_pg_data:/var/lib/postgresql/data
     networks:
@@ -193,6 +223,7 @@ services:
       - POSTGRES_USER=${LEARN_DB_USER}
       - POSTGRES_PASSWORD=${LEARN_DB_PASSWORD}
       - POSTGRES_DB=${LEARN_DB_NAME}
+
     volumes:
       - learn_pg_data:/var/lib/postgresql/data 
     networks:
@@ -211,6 +242,7 @@ services:
       - POSTGRES_USER=${READER_DB_USER}
       - POSTGRES_PASSWORD=${READER_DB_PASSWORD}
       - POSTGRES_DB=${READER_DB_NAME}
+
     volumes:
       - reader_pg_data:/var/lib/postgresql/data 
     networks:
@@ -258,7 +290,7 @@ volumes:
   learn_pg_data:
   reader_pg_data:
   minio_data:
-  certbot_conf: 
+  certbot_conf:
 
 networks:
   sfg-network:
