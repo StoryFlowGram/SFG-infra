@@ -22,7 +22,6 @@ services:
   gateway:
     image: ghcr.io/storyflowgram/api-gateway:latest 
     container_name: sfg-gateway
-
     environment:
       - JWT_SECRET_KEY=${GLOBAL_JWT_SECRET}
       - JWT_ALGORITHM=${JWT_ALGORITHM}
@@ -48,7 +47,6 @@ services:
   bot-service:
     image: ghcr.io/storyflowgram/sfg-tg-bot:latest
     container_name: sfg-bot-service
-
     environment:
       - TELEGRAM_ADMIN_ID=${TELEGRAM_ADMIN_ID}
       - BOT_TOKEN=${BOT_TOKEN}
@@ -56,7 +54,6 @@ services:
     networks:
       - sfg-network
     restart: always
-
 
   identity-service:
     image: ghcr.io/storyflowgram/identity-service:latest
@@ -67,14 +64,14 @@ services:
       - POSTGRES_PASSWORD=${IDENTITY_DB_PASSWORD}
       - POSTGRES_DB=${IDENTITY_DB_NAME}
       - DB_NAME=${IDENTITY_DB_NAME}
-      - DB_HOST=identity-db
+      - DB_HOST=db
       - REDIS_URL=${IDENTITY_REDIS_URL}
       - REDIS_HOST=${IDENTITY_REDIS_HOST}
       - JWT_SECRET=${GLOBAL_JWT_SECRET}
       - JWT_SECRET_KEY=${GLOBAL_JWT_SECRET}
       - SECRET_KEY=${GLOBAL_SECRET_KEY}
     depends_on:
-      identity-db:
+      db:
         condition: service_healthy
     networks:
       - sfg-network
@@ -98,7 +95,7 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
     depends_on:
-      book-db: 
+      db: 
         condition: service_healthy
       book-redis:
         condition: service_healthy
@@ -129,7 +126,7 @@ services:
     depends_on:
       book-redis:
         condition: service_healthy
-      book-db: 
+      db: 
         condition: service_healthy
     networks:
       - sfg-network
@@ -143,9 +140,9 @@ services:
       - POSTGRES_USER=${LEARN_DB_USER}
       - POSTGRES_PASSWORD=${LEARN_DB_PASSWORD}
       - POSTGRES_DB=${LEARN_DB_NAME}
-      - DB_HOST=learn-db
+      - DB_HOST=db
     depends_on:
-      learn-db:
+      db:
         condition: service_healthy
     networks:
       - sfg-network
@@ -160,10 +157,10 @@ services:
       - POSTGRES_PASSWORD=${READER_DB_PASSWORD}
       - POSTGRES_DB=${READER_DB_NAME}
       - DB_NAME=${READER_DB_NAME}
-      - DB_HOST=reader-db
+      - DB_HOST=db
       - BOOK_SERVICE_URL=${READER_BOOK_SERVICE_URL}
     depends_on:
-      reader-db:
+      db:
         condition: service_healthy
     networks:
       - sfg-network
@@ -177,78 +174,31 @@ services:
     restart: always
 
 
-  identity-db:  
+  db:  
     image: postgres:15
-    container_name: sfg-identity-db
+    container_name: sfg-db
     environment:
-      - POSTGRES_USER=${IDENTITY_DB_USER}
-      - POSTGRES_PASSWORD=${IDENTITY_DB_PASSWORD}
-      - POSTGRES_DB=${IDENTITY_DB_NAME}
-
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: postgres
+      IDENTITY_DB_USER: ${IDENTITY_DB_USER:-identity_user}
+      IDENTITY_DB_PASSWORD: ${IDENTITY_DB_PASSWORD:-identity_password}
+      IDENTITY_DB_NAME: ${IDENTITY_DB_NAME:-identity-db}
+      BOOK_DB_USER: ${BOOK_DB_USER:-book_user}
+      BOOK_DB_PASSWORD: ${BOOK_DB_PASSWORD:-book_password}
+      BOOK_DB_NAME: ${BOOK_DB_NAME:-book-db}
+      LEARN_DB_USER: ${LEARN_DB_USER:-learn_user}
+      LEARN_DB_PASSWORD: ${LEARN_DB_PASSWORD:-learn_password}
+      LEARN_DB_NAME: ${LEARN_DB_NAME:-learn-db}
+      READER_DB_USER: ${READER_DB_USER:-reader_user}
+      READER_DB_PASSWORD: ${READER_DB_PASSWORD:-reader_password}
+      READER_DB_NAME: ${READER_DB_NAME:-reader-db}
     volumes:
-      - identity_pg_data:/var/lib/postgresql/data 
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - sfg-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: always
-
-  book-db:
-    image: postgres:15
-    container_name: sfg-book-db
-    environment:
-      - POSTGRES_USER=${BOOK_DB_USER}
-      - POSTGRES_PASSWORD=${BOOK_DB_PASSWORD}
-      - POSTGRES_DB=${BOOK_DB_NAME}
-
-
-    volumes:
-      - book_pg_data:/var/lib/postgresql/data
-    networks:
-      - sfg-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: always
-
-  learn-db:
-    image: postgres:15
-    container_name: sfg-learn-db
-    environment:
-      - POSTGRES_USER=${LEARN_DB_USER}
-      - POSTGRES_PASSWORD=${LEARN_DB_PASSWORD}
-      - POSTGRES_DB=${LEARN_DB_NAME}
-
-    volumes:
-      - learn_pg_data:/var/lib/postgresql/data 
-    networks:
-      - sfg-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: always
-
-  reader-db:  
-    image: postgres:15
-    container_name: sfg-reader-db
-    environment:
-      - POSTGRES_USER=${READER_DB_USER}
-      - POSTGRES_PASSWORD=${READER_DB_PASSWORD}
-      - POSTGRES_DB=${READER_DB_NAME}
-
-    volumes:
-      - reader_pg_data:/var/lib/postgresql/data 
-    networks:
-      - sfg-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -285,10 +235,7 @@ services:
     restart: always
 
 volumes:
-  book_pg_data:
-  identity_pg_data:
-  learn_pg_data:
-  reader_pg_data:
+  postgres_data:
   minio_data:
   certbot_conf:
 
