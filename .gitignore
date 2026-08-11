@@ -1,2 +1,4 @@
 .env
 .env.local
+# Ignore k8s secrets
+k8s/**/secret.yaml
