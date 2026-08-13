@@ -1,5 +1,4 @@
 name: Infrastructure CI
-
 on:
   push:
     branches:
@@ -7,22 +6,21 @@ on:
   pull_request:
     branches:
       - main
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   validate:
     name: Валидация конфигурации
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+      - name: Підготовка .env файлів для перевірки
+        run: |
+          cp .env.example .env
+          cp .env.example .env.local
       - name: Проверка синтаксиса Docker Compose (Prod)
         run: docker compose -f docker-compose-prod.yaml config -q
-
       - name: Проверка синтаксиса Docker Compose (Local)
         run: docker compose -f docker-compose-local.yaml config -q
